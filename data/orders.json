@@ -1,0 +1,46 @@
+[
+  {
+    "order_id": "OD1001",
+    "user_id": "USR001",
+    "product_name": "智能手机 X",
+    "quantity": 1,
+    "total_price": 4999.00,
+    "order_status": "已发货",
+    "tracking_number": "SF123456789",
+    "estimated_delivery": "2030-08-05",
+    "order_date": "2030-07-28"
+  },
+  {
+    "order_id": "OD1002",
+    "user_id": "USR002",
+    "product_name": "蓝牙耳机 Pro",
+    "quantity": 2,
+    "total_price": 998.00,
+    "order_status": "待付款",
+    "tracking_number": null,
+    "estimated_delivery": null,
+    "order_date": "2030-07-29"
+  },
+  {
+    "order_id": "OD1003",
+    "user_id": "USR001",
+    "product_name": "笔记本电脑 Air",
+    "quantity": 1,
+    "total_price": 8999.00,
+    "order_status": "已完成",
+    "tracking_number": "YT987654321",
+    "estimated_delivery": "2030-07-25",
+    "order_date": "2030-07-20"
+  },
+  {
+    "order_id": "OD1004",
+    "user_id": "USR003",
+    "product_name": "智能手表 Lite",
+    "quantity": 1,
+    "total_price": 1299.00,
+    "order_status": "退货中",
+    "tracking_number": "JD112233445",
+    "estimated_delivery": null,
+    "order_date": "2030-07-26"
+  }
+]

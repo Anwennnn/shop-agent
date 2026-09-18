@@ -1,0 +1,23 @@
+# API 密钥及本地配置
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# 数据和缓存
+*.db
+chroma_db*/
+.cache/
+
+# 本地模型
+bge-small-zh-v1.5/
+
+# 编辑器
+.idea/
+.vscode/
