@@ -235,7 +235,7 @@ def _complain_order(
         "message": "投诉已提交",
     }
 
-def create_order_tools(current_user_id: str):
+def create_order_tools(current_user_id: str,pending_action: dict[str,Any],):
     """为当前登录用户创建订单工具。"""
 
     # 用户身份在创建工具时固定，不能被大模型修改。
@@ -249,35 +249,143 @@ def create_order_tools(current_user_id: str):
             user_id=trusted_user_id,
         )
 
-    @tool("return_order")
-    def return_order(order_id: str, reason: str) -> dict[str, Any]:
-        """为当前登录用户的指定订单提交退货申请。"""
-        return _return_order(
+    @tool("prepare_return_order")
+    def prepare_return_order(
+        order_id: str,
+        reason: str,
+    ) -> dict[str, Any]:
+        """准备退货申请。此工具只生成待确认操作，不会真正修改订单。"""
+
+        # 先检查订单是否属于当前用户。
+        order = _get_order_status(
             order_id=order_id,
             user_id=trusted_user_id,
-            reason=reason,
         )
 
-    @tool("complain_order")
-    def complain_order(
+        if not order.get("success"):
+            return order
+
+        current_status = order.get("order_status")
+
+        if current_status == "退货中":
+            return {
+                "success": False,
+                "message": "该订单已经在退货处理中",
+            }
+
+        if current_status == "待付款":
+            return {
+                "success": False,
+                "message": "待付款订单不能申请退货，可直接取消订单",
+            }
+
+        reason = reason.strip() if isinstance(reason, str) else ""
+        if not reason:
+            return {
+                "success": False,
+                "message": "请提供退货原因",
+            }
+
+        # 必须修改原字典，不能重新给 pending_action 赋值。
+        pending_action.clear()
+        pending_action.update(
+            {
+                "type": "return_order",
+                "order_id": order["order_id"],
+                "reason": reason,
+            }
+        )
+
+        return {
+            "success": True,
+            "requires_confirmation": True,
+            "message": (
+                f"即将为订单 {order['order_id']} 提交退货申请，"
+                f"原因为“{reason}”。是否确认？"
+            ),
+        }
+
+    @tool("prepare_complaint")
+    def prepare_complaint(
         order_id: str,
         complaint_content: str,
     ) -> dict[str, Any]:
-        """为当前登录用户的指定订单提交投诉。"""
-        return _complain_order(
+        """准备订单投诉。此工具只生成待确认操作，不会写入投诉记录。"""
+
+        order = _get_order_status(
             order_id=order_id,
             user_id=trusted_user_id,
-            complaint_content=complaint_content,
         )
+
+        if not order.get("success"):
+            return order
+
+        complaint_content = (
+            complaint_content.strip()
+            if isinstance(complaint_content, str)
+            else ""
+        )
+
+        if not complaint_content:
+            return {
+                "success": False,
+                "message": "请提供投诉内容",
+            }
+
+        pending_action.clear()
+        pending_action.update(
+            {
+                "type": "complain_order",
+                "order_id": order["order_id"],
+                "complaint_content": complaint_content,
+            }
+        )
+
+        return {
+            "success": True,
+            "requires_confirmation": True,
+            "message": (
+                f"即将针对订单 {order['order_id']} 提交投诉，"
+                f"投诉内容为“{complaint_content}”。是否确认？"
+            ),
+    }
 
     return [
         get_order_status,
-        return_order,
-        complain_order,
+        prepare_return_order,
+        prepare_complaint,
     ]
 
+def execute_pending_action(
+    current_user_id: str,
+    action: dict[str, Any],
+) -> dict[str, Any]:
+    """执行已经由用户明确确认的操作。此函数不注册为 Agent 工具。"""
 
-__all__ = ["create_order_tools"]
+    trusted_user_id = _normalize_user_id(current_user_id)
+    action_type = action.get("type")
+
+    if action_type == "return_order":
+        return _return_order(
+            order_id=action["order_id"],
+            user_id=trusted_user_id,
+            reason=action["reason"],
+        )
+
+    if action_type == "complain_order":
+        return _complain_order(
+            order_id=action["order_id"],
+            user_id=trusted_user_id,
+            complaint_content=action["complaint_content"],
+        )
+
+    return {
+        "success": False,
+        "message": "待确认操作无效",
+    }
+
+
+__all__ = ["create_order_tools","execute_pending_action"]
 
 if __name__ == "__main__":
     # 模拟当前已经登录的用户

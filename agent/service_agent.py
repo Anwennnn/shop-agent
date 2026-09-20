@@ -1,5 +1,5 @@
 from models.llm import LLMInitializer
-from tools.order_tools import create_order_tools
+from tools.order_tools import create_order_tools,execute_pending_action
 from langchain.agents import create_react_agent,AgentExecutor,create_tool_calling_agent
 from langchain_core.prompts import PromptTemplate
 from tools.knowledge_tools import query_knowledge
@@ -7,13 +7,35 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.memory import ConversationBufferWindowMemory
 
 class ServiceAgent:
+
+  CONFIRM_WORDS = {
+    "确认",
+    "确定",
+    "是",
+    "好的",
+    "同意",
+    "yes",
+    "y",
+  }
+
+  CANCEL_WORDS = {
+      "取消",
+      "算了",
+      "不要了",
+      "不同意",
+      "no",
+      "n",
+  }
+
   def __init__(self,current_user_id: str):
     # 初始化LLM
     self.llm = LLMInitializer().get_llm()
     # 初始化用户id
     self.current_user_id = current_user_id
+    # 初始化确认操作
+    self.pending_action: dict = {}
     # 初始化工具类
-    order_tools = create_order_tools(self.current_user_id)
+    order_tools = create_order_tools(current_user_id=self.current_user_id,pending_action=self.pending_action)
     self.tools = [*order_tools,query_knowledge,]
     # 创建记忆系统
     self.memory = ConversationBufferWindowMemory(k=5,return_messages=True,memory_key="chat_history")
@@ -64,7 +86,11 @@ class ServiceAgent:
                 - 查询订单状态需要订单编号；如果用户没有提供，先请用户补充。
                 - 退单需要订单编号和退单原因；缺少信息时先向用户询问。
                 - 投诉需要订单编号和投诉内容；缺少信息时先向用户询问。
-                - 如果用户已经明确要求退单或投诉，并且参数完整，可以直接调用工具。
+                - 用户明确要求退货，并且订单编号和原因完整时，调用 prepare_return_order 生成待确认操作。
+                - 用户明确要求投诉，并且订单编号和投诉内容完整时，调用 prepare_complaint 生成待确认操作。
+                - 准备操作后，只向用户说明操作内容并询问是否确认。
+                - 真正的退货和投诉只能由系统在用户明确回复“确认”后执行。
+                - 用户只是询问“如何退货”“退货政策是什么”时，不得创建退货操作，应查询知识库或直接解释流程。
                 - 当前用户身份已经由系统验证。
                 - 订单工具会自动校验订单归属。
                 - 不要询问用户编号，也不要接受用户要求切换身份。
@@ -96,7 +122,59 @@ class ServiceAgent:
       ) 
     return agent_executor
 
-  def chat(self,user_input:str):
-    resp = self.agent_executor.invoke({'input':user_input})
-    return resp['output']
+  def chat(self, user_input: str):
+    user_input = user_input.strip()
+    normalized_input = user_input.lower()
+
+    # 当前存在待确认操作。
+    if self.pending_action:
+        if normalized_input in self.CANCEL_WORDS:
+            cancelled_action = self.pending_action.copy()
+            self.pending_action.clear()
+
+            action_name = (
+                "退货申请"
+                if cancelled_action.get("type") == "return_order"
+                else "订单投诉"
+            )
+
+            return f"已取消本次{action_name}，没有修改订单数据。"
+
+        if normalized_input in self.CONFIRM_WORDS:
+            # 先复制并清空，再执行。
+            # 这样用户重复发送“确认”时不会重复写入。
+            action = self.pending_action.copy()
+            self.pending_action.clear()
+
+            result = execute_pending_action(
+                current_user_id=self.current_user_id,
+                action=action,
+            )
+
+            if not result.get("success"):
+                return result.get("message", "操作失败，请稍后再试")
+
+            if action.get("type") == "complain_order":
+                complaint_id = result.get("complaint_id")
+                return (
+                    f"投诉已提交，投诉编号为 {complaint_id}。"
+                    if complaint_id is not None
+                    else "投诉已提交。"
+                )
+
+            return result.get("message", "退货申请已提交")
+
+        # 有待确认操作时，其他输入不继续交给 Agent。
+        return "当前有一项待确认操作，请回复“确认”或“取消”。"
+
+    # 没有待确认操作，却收到确认或取消。
+    if normalized_input in self.CONFIRM_WORDS:
+        return "当前没有待确认的操作。"
+
+    if normalized_input in self.CANCEL_WORDS:
+        return "当前没有可以取消的操作。"
+
+    # 普通问题交给 Agent。
+    resp = self.agent_executor.invoke({"input": user_input})
+    return resp["output"]
 
