@@ -2,6 +2,19 @@
 
 一个基于 LangChain、通义模型、SQLite 和本地 RAG 的电商客服 Agent。当前支持订单查询、退货/投诉确认、用户订单隔离、商城政策问答、统一错误处理和结构化日志。
 
+## 演示界面
+
+安装依赖并启动 Streamlit：
+
+```powershell
+python -m pip install -r requirements.txt
+python -m streamlit run app.py
+```
+
+浏览器打开 `http://localhost:8501` 后，可直接点击页面中的四个示例完成订单查询、退货申请、投诉提交和商城政策问答。退货与投诉必须通过页面上的确认按钮后才会执行。
+
+界面提供模拟用户切换、聊天历史、清空对话和重置演示数据功能。每个浏览器会话使用独立的演示数据库，不会修改正式的 `data/orders.db`。
+
 ## Agent 评测
 
 评测集位于 [`evals/cases.json`](evals/cases.json)，包含订单查询、退货、投诉、知识库和安全越权等 30 条案例。评测脚本会统计工具选择、参数提取、越权拦截、无依据回答、响应时间和任务完成情况。

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import time
+import re
+from pathlib import Path
+from typing import Any
 
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.memory import ConversationBufferWindowMemory
@@ -25,15 +28,22 @@ class ServiceAgent:
     CONFIRM_WORDS = {"确认", "确定", "是", "好的", "同意", "yes", "y"}
     CANCEL_WORDS = {"取消", "算了", "不要了", "不同意", "no", "n"}
 
-    def __init__(self, current_user_id: str):
+    def __init__(
+        self,
+        current_user_id: str,
+        database_path: str | Path | None = None,
+    ):
         self.current_user_id = current_user_id
+        self.database_path = Path(database_path) if database_path is not None else None
         self.pending_action: dict = {}
         self.llm = LLMInitializer().get_llm()
 
         order_tools = create_order_tools(
             current_user_id=self.current_user_id,
             pending_action=self.pending_action,
+            database_path=self.database_path,
         )
+        self.tool_map = {current_tool.name: current_tool for current_tool in order_tools}
         self.tools = [*order_tools, query_knowledge]
         self.memory = ConversationBufferWindowMemory(
             k=5,
@@ -41,6 +51,93 @@ class ServiceAgent:
             memory_key="chat_history",
         )
         self.agent_executor = self._create_agent_executor()
+
+    @staticmethod
+    def _extract_business_detail(
+        user_input: str,
+        order_id: str,
+        removable_phrases: tuple[str, ...],
+    ) -> str:
+        detail = re.sub(re.escape(order_id), "", user_input, flags=re.IGNORECASE)
+        for phrase in sorted(removable_phrases, key=len, reverse=True):
+            detail = detail.replace(phrase, "")
+        return detail.strip(" ，,。.!！?？:：；;\t\n")
+
+    @staticmethod
+    def _tool_message(result: Any) -> str:
+        if not isinstance(result, dict) or not isinstance(result.get("success"), bool):
+            raise TypeError("工具返回格式异常")
+        message = result.get("message")
+        if not isinstance(message, str) or not message.strip():
+            raise TypeError("工具返回内容为空或格式异常")
+        return message.strip()
+
+    def _prepare_explicit_side_effect(self, user_input: str) -> str | None:
+        """Deterministically prepare explicit writes; never trust a verbal claim."""
+        order_match = re.search(r"\bOD\d+\b", user_input, flags=re.IGNORECASE)
+        if order_match is None:
+            return None
+        order_id = order_match.group(0).upper()
+
+        complaint_intent = any(
+            phrase in user_input
+            for phrase in ("投诉订单", "我要投诉", "帮我投诉", "提交投诉", "发起投诉")
+        )
+        if complaint_intent:
+            complaint_content = self._extract_business_detail(
+                user_input,
+                order_id,
+                (
+                    "请帮我",
+                    "投诉内容为",
+                    "投诉内容是",
+                    "发起投诉",
+                    "提交投诉",
+                    "投诉订单",
+                    "我要投诉",
+                    "帮我投诉",
+                    "订单",
+                ),
+            )
+            if complaint_content:
+                result = self.tool_map["prepare_complaint"].invoke(
+                    {
+                        "order_id": order_id,
+                        "complaint_content": complaint_content,
+                    }
+                )
+                return self._tool_message(result)
+
+        return_intent = any(
+            phrase in user_input
+            for phrase in ("帮我退", "我要退", "申请退货", "办理退货", "退掉订单")
+        )
+        if return_intent:
+            reason = self._extract_business_detail(
+                user_input,
+                order_id,
+                (
+                    "帮我退掉订单",
+                    "原因是",
+                    "原因为",
+                    "请帮我",
+                    "申请退货",
+                    "办理退货",
+                    "退掉订单",
+                    "帮我退掉",
+                    "帮我退",
+                    "我要退货",
+                    "我要退",
+                    "订单",
+                ),
+            )
+            if reason:
+                result = self.tool_map["prepare_return_order"].invoke(
+                    {"order_id": order_id, "reason": reason}
+                )
+                return self._tool_message(result)
+
+        return None
 
     def _create_agent_executor(self) -> AgentExecutor:
         agent_prompt = ChatPromptTemplate.from_messages(
@@ -103,7 +200,11 @@ class ServiceAgent:
             if normalized_input in self.CONFIRM_WORDS:
                 action = self.pending_action.copy()
                 self.pending_action.clear()
-                result = execute_pending_action(self.current_user_id, action)
+                result = execute_pending_action(
+                    self.current_user_id,
+                    action,
+                    database_path=self.database_path,
+                )
 
                 if not isinstance(result, dict) or not isinstance(
                     result.get("success"), bool
@@ -124,6 +225,10 @@ class ServiceAgent:
             return "当前没有待确认的操作。"
         if normalized_input in self.CANCEL_WORDS:
             return "当前没有可以取消的操作。"
+
+        prepared_action = self._prepare_explicit_side_effect(user_input)
+        if prepared_action is not None:
+            return prepared_action
 
         response = self.agent_executor.invoke({"input": user_input})
         if not isinstance(response, dict):
@@ -166,6 +271,7 @@ class ServiceAgent:
                 success=False,
                 started_at=started_at,
                 error_type=error_type,
+                exception_class=type(exc).__name__,
             )
             return agent_error_message(error_type, request_id)
         finally:

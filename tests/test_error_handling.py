@@ -43,6 +43,17 @@ def _agent_with_executor(executor: _FakeExecutor) -> ServiceAgent:
     return agent
 
 
+def _agent_with_order_tools(database_path: Path) -> ServiceAgent:
+    agent = _agent_with_executor(_FakeExecutor(result={"output": "模型回复"}))
+    tools = order_tools.create_order_tools(
+        "USR001",
+        agent.pending_action,
+        database_path=database_path,
+    )
+    agent.tool_map = {current_tool.name: current_tool for current_tool in tools}
+    return agent
+
+
 class ErrorHandlingTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -143,6 +154,41 @@ class ErrorHandlingTests(unittest.TestCase):
         result = agent.chat("查询订单")
         self.assertIn("模型响应超时", result)
         self.assertIn("请求编号", result)
+
+    def test_explicit_complaint_always_creates_pending_action(self):
+        agent = _agent_with_order_tools(self.database_path)
+
+        result = agent._handle_message("投诉订单 OD1001，收到的商品包装破损")
+
+        self.assertIn("是否确认", result)
+        self.assertEqual(
+            agent.pending_action,
+            {
+                "type": "complain_order",
+                "order_id": "OD1001",
+                "complaint_content": "收到的商品包装破损",
+            },
+        )
+
+    def test_explicit_return_always_creates_pending_action(self):
+        agent = _agent_with_order_tools(self.database_path)
+
+        result = agent._handle_message(
+            "帮我退掉订单 OD1001，原因是商品质量问题"
+        )
+
+        self.assertIn("是否确认", result)
+        self.assertEqual(agent.pending_action["type"], "return_order")
+        self.assertEqual(agent.pending_action["order_id"], "OD1001")
+        self.assertEqual(agent.pending_action["reason"], "商品质量问题")
+
+    def test_return_policy_question_does_not_prepare_return(self):
+        agent = _agent_with_order_tools(self.database_path)
+
+        result = agent._handle_message("退货需要满足什么条件？")
+
+        self.assertEqual(result, "模型回复")
+        self.assertEqual(agent.pending_action, {})
 
     def test_model_authentication_failure_returns_friendly_message(self):
         agent = _agent_with_executor(

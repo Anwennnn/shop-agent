@@ -22,7 +22,7 @@ from config import setting
 
 def setup_database(
     json_path: str | Path = setting.JSON_PATH,
-    database_path: str | Path = setting.JSON_PATH,
+    database_path: str | Path = setting.DATABASE_PATH,
 ) -> int:
     """创建订单表，并将 JSON 文件中的订单导入 SQLite 数据库。
 
@@ -114,4 +114,4 @@ def setup_database(
 if __name__ == "__main__":
     # 直接运行本脚本时执行数据库初始化，并输出导入结果。
     imported_count = setup_database()
-    print(f"成功导入 {imported_count} 条订单到 {setting.JSON_PATH}")
+    print(f"成功导入 {imported_count} 条订单到 {setting.DATABASE_PATH}")

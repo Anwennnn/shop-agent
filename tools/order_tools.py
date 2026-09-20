@@ -22,9 +22,10 @@ TOOL_ERROR_MESSAGE = "订单操作暂时无法完成，请稍后重试"
 
 
 @contextmanager
-def _connect() -> Iterator[sqlite3.Connection]:
+def _connect(database_path: str | Path | None = None) -> Iterator[sqlite3.Connection]:
     """Open the configured database; the path is never exposed to the LLM."""
-    connection = sqlite3.connect(DATABASE_PATH, timeout=5)
+    resolved_path = Path(database_path) if database_path is not None else DATABASE_PATH
+    connection = sqlite3.connect(resolved_path, timeout=5)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     try:
@@ -77,11 +78,16 @@ def _create_service_tables(connection: sqlite3.Connection) -> None:
     )
 
 
-def _get_order_status(order_id: str, user_id: str) -> dict[str, Any]:
+def _get_order_status(
+    order_id: str,
+    user_id: str,
+    database_path: str | Path | None = None,
+) -> dict[str, Any]:
     order_id = _normalize_order_id(order_id)
     user_id = _normalize_user_id(user_id)
 
-    with _connect() as connection:
+    connection_manager = _connect() if database_path is None else _connect(database_path)
+    with connection_manager as connection:
         order = connection.execute(
             """
             SELECT order_id, product_name, order_status,
@@ -105,14 +111,20 @@ def _get_order_status(order_id: str, user_id: str) -> dict[str, Any]:
     }
 
 
-def _return_order(order_id: str, user_id: str, reason: str) -> dict[str, Any]:
+def _return_order(
+    order_id: str,
+    user_id: str,
+    reason: str,
+    database_path: str | Path | None = None,
+) -> dict[str, Any]:
     order_id = _normalize_order_id(order_id)
     user_id = _normalize_user_id(user_id)
     reason = reason.strip() if isinstance(reason, str) else ""
     if not reason:
         raise ValueError("退货原因不能为空")
 
-    with _connect() as connection:
+    connection_manager = _connect() if database_path is None else _connect(database_path)
+    with connection_manager as connection:
         _create_service_tables(connection)
         order = connection.execute(
             "SELECT order_status FROM orders WHERE order_id = ? AND user_id = ?",
@@ -166,6 +178,7 @@ def _complain_order(
     order_id: str,
     user_id: str,
     complaint_content: str,
+    database_path: str | Path | None = None,
 ) -> dict[str, Any]:
     order_id = _normalize_order_id(order_id)
     user_id = _normalize_user_id(user_id)
@@ -175,7 +188,8 @@ def _complain_order(
     if not complaint_content:
         raise ValueError("投诉内容不能为空")
 
-    with _connect() as connection:
+    connection_manager = _connect() if database_path is None else _connect(database_path)
+    with connection_manager as connection:
         _create_service_tables(connection)
         order_exists = connection.execute(
             "SELECT 1 FROM orders WHERE order_id = ? AND user_id = ?",
@@ -251,16 +265,22 @@ def _safe_order_operation(
 def create_order_tools(
     current_user_id: str,
     pending_action: dict[str, Any],
+    database_path: str | Path | None = None,
 ):
     """Create tools bound to one trusted authenticated user."""
     trusted_user_id = _normalize_user_id(current_user_id)
+    trusted_database_path = Path(database_path) if database_path is not None else None
 
     @tool("get_order_status")
     def get_order_status(order_id: str) -> dict[str, Any]:
         """查询当前登录用户的订单状态和物流信息。"""
         return _safe_order_operation(
             "get_order_status",
-            lambda: _get_order_status(order_id, trusted_user_id),
+            lambda: _get_order_status(
+                order_id,
+                trusted_user_id,
+                trusted_database_path,
+            ),
         )
 
     @tool("prepare_return_order")
@@ -268,7 +288,11 @@ def create_order_tools(
         """准备退货申请；只生成待确认操作，不修改订单。"""
 
         def prepare() -> dict[str, Any]:
-            order = _get_order_status(order_id, trusted_user_id)
+            order = _get_order_status(
+                order_id,
+                trusted_user_id,
+                trusted_database_path,
+            )
             if not order["success"]:
                 return order
             if order["order_status"] == "退货中":
@@ -310,7 +334,11 @@ def create_order_tools(
         """准备订单投诉；只生成待确认操作，不写入投诉记录。"""
 
         def prepare() -> dict[str, Any]:
-            order = _get_order_status(order_id, trusted_user_id)
+            order = _get_order_status(
+                order_id,
+                trusted_user_id,
+                trusted_database_path,
+            )
             if not order["success"]:
                 return order
 
@@ -347,6 +375,7 @@ def create_order_tools(
 def execute_pending_action(
     current_user_id: str,
     action: dict[str, Any],
+    database_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Execute a confirmed action. This function is intentionally not an LLM tool."""
     trusted_user_id = _normalize_user_id(current_user_id)
@@ -359,6 +388,7 @@ def execute_pending_action(
                 action.get("order_id", ""),
                 trusted_user_id,
                 action.get("reason", ""),
+                database_path,
             ),
         )
     if action_type == "complain_order":
@@ -368,6 +398,7 @@ def execute_pending_action(
                 action.get("order_id", ""),
                 trusted_user_id,
                 action.get("complaint_content", ""),
+                database_path,
             ),
         )
     return {"success": False, "message": "待确认操作无效"}

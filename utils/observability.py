@@ -69,6 +69,7 @@ def log_event(
     started_at: float,
     tool_name: str | None = None,
     error_type: str | None = None,
+    exception_class: str | None = None,
     outcome: str | None = None,
 ) -> None:
     """Write metadata only; never include prompts, keys, or user content."""
@@ -85,6 +86,8 @@ def log_event(
         payload["tool_name"] = tool_name
     if error_type:
         payload["error_type"] = error_type
+    if exception_class:
+        payload["exception_class"] = exception_class
     if outcome:
         payload["outcome"] = outcome
 
