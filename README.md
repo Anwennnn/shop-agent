@@ -4,16 +4,31 @@
 
 ## 演示界面
 
-安装依赖并启动 Streamlit：
+建议使用 Python 3.11 或 3.12。第一次运行时，在项目根目录创建全新的虚拟环境：
 
 ```powershell
-python -m pip install -r requirements.txt
-python -m streamlit run app.py
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+Copy-Item .env.example .env
+# 打开 .env，将 TONGYI_KEY= 后面填写为自己的 API Key
+python data\setup_database.py
+streamlit run app.py
+```
+
+如果 PowerShell 禁止执行激活脚本，可先仅为当前终端放开限制：
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
 ```
 
 浏览器打开 `http://localhost:8501` 后，可直接点击页面中的四个示例完成订单查询、退货申请、投诉提交和商城政策问答。退货与投诉必须通过页面上的确认按钮后才会执行。
 
 界面提供模拟用户切换、聊天历史、清空对话和重置演示数据功能。每个浏览器会话使用独立的演示数据库，不会修改正式的 `data/orders.db`。
+
+启动前请确认项目根目录包含本地向量模型目录 `bge-small-zh-v1.5/`，并在 `.env` 中配置 `TONGYI_KEY`。真实密钥不得提交到 Git。
 
 ## Agent 评测
 
