@@ -1,0 +1,18 @@
+# Web interface
+streamlit==1.64.0
+
+# Agent and model providers
+langchain==0.3.30
+langchain-community==0.3.27
+langchain-core==0.3.86
+langchain-huggingface==0.3.0
+dashscope==1.23.7
+httpx==0.28.1
+
+# Local RAG
+chromadb==1.0.15
+sentence-transformers==5.0.0
+
+# Configuration and tests
+python-dotenv==1.2.2
+pytest==9.1.1

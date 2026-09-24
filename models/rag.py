@@ -1,19 +1,24 @@
-import os
+"""Retrieval-augmented generation for store policy questions."""
+
+from __future__ import annotations
+
 from pathlib import Path
 from threading import Lock
+from typing import Any
 
-from models.llm import LLMInitializer
-from config import setting
-
-from langchain_community.document_loaders import TextLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
-from langchain.prompts import PromptTemplate
 from langchain.chains.retrieval_qa.base import RetrievalQA
+from langchain.prompts import PromptTemplate
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import TextLoader
+from langchain_community.vectorstores import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
+
+from config import setting
+from models.llm import LLMInitializer
+
 
 class RAGSystem:
-    """通义千问 LLM 单例初始化器。"""
+    """Lazy singleton for the policy knowledge base."""
 
     _instance = None
     _lock = Lock()
@@ -22,20 +27,28 @@ class RAGSystem:
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance.qa_chain = None
-                    cls._instance.initialize()
+                    instance = super().__new__(cls)
+                    instance.qa_chain = None
+                    instance.vector_store = None
+                    cls._instance = instance
+                    try:
+                        instance.initialize()
+                    except Exception:
+                        # A failed initialization must not poison later retries.
+                        cls._instance = None
+                        raise
         return cls._instance
 
     def initialize(self):
         if self.qa_chain is not None:
             return self.qa_chain
-        # 获取LLM
-        llm = LLMInitializer().get_llm()
 
-        # 加载本地嵌入模型。
+        embedding_path = Path(setting.EMBEDDING_MODEL)
+        if not embedding_path.exists():
+            raise FileNotFoundError("本地向量模型不存在")
+
         embeddings = HuggingFaceEmbeddings(
-            model_name=setting.EMBEDDING_MODEL,
+            model_name=str(embedding_path),
             model_kwargs={"device": "cpu"},
             encode_kwargs={"normalize_embeddings": False},
         )
@@ -44,71 +57,91 @@ class RAGSystem:
         db_file = db_dir / "chroma.sqlite3"
 
         if db_file.exists():
-            # 向量数据库已经存在，直接加载，不再重复切分和向量化文档。
-            print("正在加载已有知识库……")
-
-            db = Chroma(
+            vector_store = Chroma(
                 persist_directory=str(db_dir),
                 embedding_function=embeddings,
             )
         else:
-            # 只有第一次运行时才读取、切分并向量化政策文档。
-            print("首次运行，正在创建知识库……")
+            document_path = Path(setting.DOC_PATH)
+            if not document_path.exists():
+                raise FileNotFoundError("知识库文档不存在")
 
-            # 加载数据
-            loader = TextLoader(
-                str(setting.DOC_PATH),
+            documents = TextLoader(
+                str(document_path),
                 encoding="utf-8",
-            )
-            documents = loader.load()
-
-            # 文档切割
-            text_splitter = RecursiveCharacterTextSplitter(
+            ).load()
+            splits = RecursiveCharacterTextSplitter(
                 chunk_size=setting.CHUNK_SIZE,
                 chunk_overlap=setting.CHUNK_OVERLAP,
                 separators=["\n\n", "\n", "。", "！", "？", "!", "?"],
-            )
-            splits = text_splitter.split_documents(documents)
+            ).split_documents(documents)
+
+            if not splits:
+                raise ValueError("知识库文档没有可索引内容")
 
             db_dir.mkdir(parents=True, exist_ok=True)
-
-            # 创建数据库
-            db = Chroma.from_documents(
+            vector_store = Chroma.from_documents(
                 documents=splits,
                 embedding=embeddings,
                 persist_directory=str(db_dir),
             )
 
-        # 创建提示词模板
-        rag_prompt_template = '''
-        你是一个专业的电商客服助手，根据以下商品政策信息，用自然友好的对话风格回答用户问题，就像在聊天一样。
-    ​
-        已知信息:
-        {context} # 检索出来的原始文档
-    ​
-        用户问题:
-        {question} # 用户的问题
-    ​
-        如果已知信息中不包含用户问题的答案，或者已知信息无法回答用户问题，请直接返回"这个问题暂时我还不会。您可以联系人工客服"。
-        请不要输出已知信息中不包含的信息或者答案。
-        请用中文回答用户问题。
-        '''
-        rag_prompt = PromptTemplate(
-          template=rag_prompt_template,
-          input_variables=["context", "question"]
+        prompt = PromptTemplate(
+            template="""
+你是一名专业的电商客服助手。请只根据下面的商城政策回答问题。
+
+已知信息：
+{context}
+
+用户问题：
+{question}
+
+如果已知信息不足以回答，请回复：
+“这个问题暂时我还不会，您可以联系人工客服”。
+不得编造已知信息中不存在的内容，请使用简洁、自然的中文回答。
+""".strip(),
+            input_variables=["context", "question"],
         )
 
-        # 创建qa链
+        self.vector_store = vector_store
         self.qa_chain = RetrievalQA.from_chain_type(
-          llm = llm,
-          retriever = db.as_retriever(search_kwargs={"k":1}),
-          return_source_documents = False, # 返回源文档
-          chain_type_kwargs = {"prompt":rag_prompt} # 自定义提示词
+            llm=LLMInitializer().get_llm(),
+            retriever=vector_store.as_retriever(search_kwargs={"k": 3}),
+            return_source_documents=False,
+            chain_type_kwargs={"prompt": prompt},
         )
         return self.qa_chain
-    
+
+    def has_relevant_context(self, question: str) -> bool:
+        """Reject clearly unrelated questions before calling the LLM."""
+        if self.vector_store is None:
+            raise RuntimeError("知识库尚未初始化")
+
+        results = self.vector_store.similarity_search_with_relevance_scores(
+            question,
+            k=1,
+        )
+        if not results:
+            return False
+        return results[0][1] >= setting.RAG_SCORE_THRESHOLD
+
+    def query(self, question: str) -> str | None:
+        if not self.has_relevant_context(question):
+            return None
+        if self.qa_chain is None:
+            raise RuntimeError("知识库问答链尚未初始化")
+
+        answer: Any = self.qa_chain.invoke({"query": question})
+        if not isinstance(answer, dict):
+            raise TypeError("知识库返回格式异常")
+        result = answer.get("result")
+        if not isinstance(result, str):
+            raise TypeError("知识库返回格式异常")
+        return result.strip() or None
+
     def get_chain(self):
         return self.qa_chain
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     RAGSystem()

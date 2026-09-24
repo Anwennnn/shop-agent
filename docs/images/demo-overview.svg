@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680" role="img" aria-labelledby="title desc">
+  <title id="title">Shop Agent 演示界面功能预览</title>
+  <desc id="desc">展示用户选择、订单查询、退货确认、投诉提交和商城政策问答功能。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fbff"/>
+      <stop offset="1" stop-color="#eef3ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#25304a" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="680" rx="24" fill="url(#bg)"/>
+  <rect x="34" y="30" width="1132" height="620" rx="20" fill="#ffffff" filter="url(#shadow)"/>
+
+  <rect x="34" y="30" width="290" height="620" rx="20" fill="#17223b"/>
+  <circle cx="82" cy="82" r="22" fill="#ff8a3d"/>
+  <text x="118" y="90" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="28" font-weight="700" fill="#ffffff">Shop Agent</text>
+  <text x="66" y="142" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" fill="#9eabc7">当前模拟用户</text>
+  <rect x="62" y="160" width="234" height="48" rx="10" fill="#263451"/>
+  <text x="82" y="191" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" fill="#ffffff">U1001</text>
+  <text x="66" y="255" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" fill="#9eabc7">系统能力</text>
+  <g font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" fill="#edf2ff">
+    <text x="68" y="298">✓ 订单查询</text>
+    <text x="68" y="338">✓ 退货申请</text>
+    <text x="68" y="378">✓ 投诉提交</text>
+    <text x="68" y="418">✓ 商城政策问答</text>
+  </g>
+  <rect x="62" y="540" width="234" height="50" rx="12" fill="#344462"/>
+  <text x="105" y="572" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" fill="#ffffff">清空当前对话</text>
+
+  <text x="370" y="82" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="30" font-weight="700" fill="#17223b">电商智能客服</text>
+  <text x="370" y="113" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" fill="#6c7893">订单操作有权限校验，写操作需要用户确认</text>
+
+  <rect x="370" y="144" width="690" height="64" rx="14" fill="#f2f5fa"/>
+  <circle cx="405" cy="176" r="18" fill="#ff5f66"/>
+  <text x="440" y="183" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="20" fill="#27324b">帮我退掉订单 OD1003，原因是商品质量问题</text>
+
+  <rect x="422" y="228" width="712" height="113" rx="14" fill="#fff7eb" stroke="#ffd89d"/>
+  <circle cx="457" cy="264" r="18" fill="#ffa62b"/>
+  <text x="490" y="263" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="19" fill="#27324b">即将为订单 OD1003 提交退货申请，</text>
+  <text x="490" y="293" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="19" fill="#27324b">原因为“商品质量问题”。是否确认？</text>
+  <rect x="490" y="306" width="90" height="26" rx="8" fill="#ff8a3d"/>
+  <text x="518" y="325" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#ffffff">确认</text>
+  <rect x="590" y="306" width="90" height="26" rx="8" fill="#ffffff" stroke="#c8d0df"/>
+  <text x="618" y="325" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14" fill="#536079">取消</text>
+
+  <text x="370" y="392" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#485570">示例问题</text>
+  <g font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" fill="#33405c">
+    <rect x="370" y="410" width="230" height="42" rx="10" fill="#edf3ff"/><text x="390" y="437">查询订单 OD1001</text>
+    <rect x="612" y="410" width="235" height="42" rx="10" fill="#edf3ff"/><text x="632" y="437">投诉订单 OD1001</text>
+    <rect x="859" y="410" width="275" height="42" rx="10" fill="#edf3ff"/><text x="879" y="437">七天无理由退货条件</text>
+  </g>
+
+  <rect x="370" y="490" width="764" height="70" rx="14" fill="#ffffff" stroke="#d8deea" stroke-width="2"/>
+  <text x="395" y="533" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" fill="#9aa5ba">请输入订单或商城政策问题……</text>
+  <rect x="1038" y="503" width="78" height="44" rx="12" fill="#4263eb"/>
+  <text x="1061" y="532" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#ffffff">发送</text>
+  <text x="370" y="606" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14" fill="#8a95aa">Streamlit · LangChain · SQLite · Chroma · Tongyi</text>
+</svg>

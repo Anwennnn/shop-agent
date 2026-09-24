@@ -19,7 +19,7 @@ class Settings:
     ZHIPU_KEY: str | None = os.getenv("ZHIPU_KEY")
 
     # 模型配置
-    MODEL_NAME: str = os.getenv("MODEL_NAME", "glm-4")
+    MODEL_NAME: str = os.getenv("MODEL_NAME", "deepseek-v4-flash-0731")
     TEMPERATURE: float = float(os.getenv("TEMPERATURE", "0.2"))
 
     # 订单数据路径
@@ -33,6 +33,7 @@ class Settings:
     CHROMA_DB_PATH: str = str(BASE_DIR / ".cache" / "chroma")
     CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "200"))
     CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "30"))
+    RAG_SCORE_THRESHOLD: float = float(os.getenv("RAG_SCORE_THRESHOLD", "0.2"))
 
 
 setting = Settings()

@@ -1,8 +1,4 @@
-import os
 from threading import Lock
-
-# from langchain_community.llms import tongyi
-# from langchain_community.chat_models import ChatZhipuAI
 
 from langchain_community.chat_models import ChatTongyi
 from config import setting
@@ -31,15 +27,12 @@ class LLMInitializer:
                         raise RuntimeError(
                             "请先配置 DASHSCOPE_API_KEY 环境变量"
                         )
-                    self.llm = ChatTongyi(model="deepseek-v4-flash-0731",api_key=api_key)
-
-                    # key = setting.ZHIPU_KEY
-                    # os.environ["ZHIPUAI_API_KEY"] = key
-                    # self.llm = ChatZhipuAI(
-                    #     model=setting.MODEL_NAME,
-                    #     temperature=setting.TEMPERATURE,
-                    #     disable_streaming=True
-                    # )
+                    self.llm = ChatTongyi(
+                        model=setting.MODEL_NAME,
+                        api_key=api_key,
+                        max_retries=2,
+                        model_kwargs={"temperature": setting.TEMPERATURE},
+                    )
         return self.llm
 
 if __name__ == '__main__':
